@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "如果在教学或研究中使用了本项目，请按以下信息引用。If you use this project, please cite it as below."
+title: "text-to-3d-world: 文字生成世界 (Text to 3D World)"
+type: software
+authors:
+  - family-names: Gao
+    given-names: Shuyao
+    email: "gaoshuyao.mk@gmail.com"
+    affiliation: "aSSIST University (Seoul School of Integrated Sciences and Technologies)"
+version: "1.0"
+date-released: "2026-10-15"
+license: MIT
+repository-code: "https://github.com/ShuyaoGao/text-to-3d-world"
+url: "https://ShuyaoGao.github.io/text-to-3d-world/play/"
+abstract: >-
+  A browser-only teaching demo (AI Teaching Demos): a Chinese sentence is parsed by a keyword
+  rule engine into a JSON scene plan (objects, counts, directions, relative positions, colours,
+  sizes) and built in three.js from primitive shapes with seeded rejection sampling. A live
+  understanding panel shows every step; four rule levels start from the original keyword engine.
+  The original page that can call a large language model is kept as app/index_full.html.
+keywords:
+  - course-demo
+  - threejs
+  - procedural-generation
+  - rule-based-nlp

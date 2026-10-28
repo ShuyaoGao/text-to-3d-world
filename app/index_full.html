@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<!-- 完整版（原版页面）：可以连接本机的大模型服务或在线的 OpenAI 兼容接口，让大语言模型理解任意描述。
+     它会联网 / 连本机端口，所以不放进 play/；离线版见 ../play/index.html。用法见 README「完整版」一节。 -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>文字世界 · 本地版</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { height:100%; overflow:hidden; background:#bfe3f0;
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei","Segoe UI",system-ui,sans-serif; }
+  #app { position:fixed; inset:0; }
+  canvas { display:block; touch-action:none; }
+
+  .panel { position:fixed; background:rgba(255,255,255,0.84); backdrop-filter:blur(8px);
+    border:1px solid rgba(255,255,255,0.6); border-radius:16px; color:#33352f; }
+
+  #info { top:16px; left:16px; padding:13px 16px; width:248px; }
+  #info h1 { font-size:16px; font-weight:600; letter-spacing:0.4px; }
+  #conn { font-size:12.5px; color:#5a5c52; margin-top:9px; display:flex; align-items:center; }
+  .dot { width:9px; height:9px; border-radius:50%; margin-right:7px; background:#b9bcc2; flex:none; }
+  .dot.ok{background:#2e9e6b;} .dot.warn{background:#e0a020;} .dot.err{background:#d0524a;}
+  .row { display:flex; gap:6px; margin-top:9px; }
+  #model, #engine, #cloudUrl, #cloudKey, #cloudModel { flex:1; min-width:0; font-size:12px; padding:6px 8px;
+    border:1px solid rgba(0,0,0,0.12); border-radius:8px; background:rgba(255,255,255,0.7); color:#33352f; outline:none; }
+  #reconnect { font-size:12px; padding:6px 11px; border:none; border-radius:8px; background:#e7e4da;
+    color:#4a4c44; cursor:pointer; }
+  #reconnect:hover { background:#ddd9cd; }
+  #count { font-size:12px; color:#8a8c80; margin-top:9px; }
+  .hint { font-size:11.5px; color:#9a9c90; margin-top:5px; line-height:1.5; }
+  .setup { display:none; margin-top:10px; padding:9px 10px; border-radius:10px;
+    background:rgba(208,82,74,0.08); border:1px solid rgba(208,82,74,0.25);
+    font-size:11.5px; color:#6a4c48; line-height:1.7; }
+  .setup.show { display:block; }
+  .setup b { display:block; margin-bottom:5px; color:#8a3a34; }
+  .setup span { display:block; margin-top:4px; color:#8a6c68; }
+  .setup code { display:inline-block; font-family:ui-monospace,Menlo,Consolas,monospace;
+    background:rgba(0,0,0,0.06); padding:2px 6px; border-radius:5px; color:#5a2c28; font-size:11px; }
+
+  #tools { top:16px; right:16px; display:flex; gap:8px; }
+  .tbtn { padding:9px 13px; font-size:13px; border-radius:12px; cursor:pointer;
+    background:rgba(255,255,255,0.84); color:#4a4c44; backdrop-filter:blur(8px);
+    border:1px solid rgba(255,255,255,0.6); }
+  .tbtn:hover { background:#fff; }
+  .tbtn.active { background:#d0524a; color:#fff; border-color:#d0524a; }
+
+  #bar { bottom:max(18px,env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%);
+    width:min(640px,calc(100% - 32px)); padding:8px; display:flex; gap:8px; align-items:center; }
+  #q { flex:1; border:none; outline:none; background:transparent; font-size:15px; color:#2f312b;
+    padding:8px 6px 8px 12px; min-width:0; }
+  #q::placeholder { color:#9a9c90; }
+  #go { flex:none; border:none; cursor:pointer; font-size:14px; font-weight:600; color:#fff;
+    background:#4c8f6e; padding:10px 18px; border-radius:11px; }
+  #go:hover { background:#3f7c5e; }
+  #go:disabled { opacity:.55; cursor:default; }
+
+  #status { position:fixed; bottom:calc(max(18px,env(safe-area-inset-bottom)) + 64px); left:50%;
+    transform:translateX(-50%); font-size:12.5px; color:#4a4c44; background:rgba(255,255,255,0.88);
+    padding:6px 14px; border-radius:20px; opacity:0; transition:opacity .25s; pointer-events:none;
+    backdrop-filter:blur(8px); white-space:nowrap; }
+  #status.show { opacity:1; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="info" class="panel">
+  <h1>文字世界 · 本地版</h1>
+  <div id="conn"><span class="dot" id="dot"></span><span id="conntxt">正在连接 Ollama…</span></div>
+  <div class="row">
+    <select id="engine">
+      <option value="ollama">本地 Ollama</option>
+      <option value="cloud">云端 API</option>
+    </select>
+  </div>
+  <div class="row" id="rowOllama">
+    <input id="model" value="qwen3:4b" autocomplete="off" spellcheck="false">
+    <button id="reconnect">连接</button>
+  </div>
+  <div id="cloudCfg" style="display:none">
+    <div class="row"><input id="cloudUrl" placeholder="API 地址 如 https://api.deepseek.com/v1" autocomplete="off" spellcheck="false"></div>
+    <div class="row"><input id="cloudKey" type="password" placeholder="API Key" autocomplete="off"></div>
+    <div class="row"><input id="cloudModel" placeholder="模型 如 deepseek-chat" autocomplete="off" spellcheck="false"><button id="cloudSave">保存</button></div>
+  </div>
+  <div id="count">世界里有 0 个物体</div>
+  <p class="hint">拖动转视角 · 滚轮缩放 · WASD 走动</p>
+  <div id="setup" class="setup">
+    <b>连不上?在终端这样启动 Ollama:</b>
+    <code>set OLLAMA_ORIGINS=*<br>ollama serve</code>
+    <span>然后另开一个终端: <code>ollama run qwen3:4b</code></span>
+    <span>(Mac/Linux 用 <code>OLLAMA_ORIGINS=* ollama serve</code>)</span>
+  </div>
+</div>
+
+<div id="tools">
+  <button class="tbtn" id="undo">撤销</button>
+  <button class="tbtn" id="del">删除:关</button>
+  <button class="tbtn" id="surprise">随机风景</button>
+  <button class="tbtn" id="clear">清空</button>
+</div>
+
+<div id="status"></div>
+
+<div id="bar" class="panel">
+  <input id="q" autocomplete="off" placeholder="试试:北边一座火山,山下一片森林">
+  <button id="go">生成</button>
+</div>
+
+<!-- three.js r128（MIT），已放本地 vendor/，离线可用；原地址 https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js -->
+<script src="../play/vendor/three.min.js"></script>
+<script>
+// ================= scene =================
+const app = document.getElementById('app');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#bfe3f0');
+scene.fog = new THREE.Fog('#bfe3f0', 70, 160);
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.1, 600);
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+app.appendChild(renderer.domElement);
+
+const hemi = new THREE.HemisphereLight('#dff1ff', '#8a8b6a', 0.95); scene.add(hemi);
+const sun = new THREE.DirectionalLight('#fff4e0', 1.0);
+sun.position.set(34, 52, 22); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left=-70; sun.shadow.camera.right=70; sun.shadow.camera.top=70; sun.shadow.camera.bottom=-70;
+sun.shadow.camera.near=1; sun.shadow.camera.far=200; sun.shadow.bias=-0.0004;
+scene.add(sun);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(400,400),
+  new THREE.MeshStandardMaterial({ color:'#a9c47f', roughness:1 }));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+// ================= camera controls =================
+const target = new THREE.Vector3(0, 1, 0);
+let radius=46, theta=0.9, phi=0.95; const keys={};
+function updateCam(){
+  phi = Math.max(0.18, Math.min(1.45, phi));
+  radius = Math.max(12, Math.min(140, radius));
+  camera.position.set(
+    target.x + radius*Math.sin(phi)*Math.cos(theta),
+    target.y + radius*Math.cos(phi),
+    target.z + radius*Math.sin(phi)*Math.sin(theta));
+  camera.lookAt(target);
+}
+updateCam();
+const pointers=new Map(); let lastPinch=0; const dom=renderer.domElement;
+dom.addEventListener('pointerdown', e=>{ pointers.set(e.pointerId,{x:e.clientX,y:e.clientY}); dom.setPointerCapture(e.pointerId); });
+dom.addEventListener('pointerup', e=>{ pointers.delete(e.pointerId); lastPinch=0; });
+dom.addEventListener('pointercancel', e=>{ pointers.delete(e.pointerId); lastPinch=0; });
+dom.addEventListener('pointermove', e=>{
+  const p=pointers.get(e.pointerId); if(!p) return;
+  const dx=e.clientX-p.x, dy=e.clientY-p.y; p.x=e.clientX; p.y=e.clientY;
+  if(pointers.size===1){ theta-=dx*0.005; phi-=dy*0.005; updateCam(); }
+  else if(pointers.size===2){ const a=[...pointers.values()];
+    const d=Math.hypot(a[0].x-a[1].x, a[0].y-a[1].y);
+    if(lastPinch) { radius*=1-(d-lastPinch)*0.005; updateCam(); } lastPinch=d; }
+});
+dom.addEventListener('wheel', e=>{ e.preventDefault(); radius*=1+e.deltaY*0.0011; updateCam(); }, {passive:false});
+addEventListener('keydown', e=>{ keys[e.key.toLowerCase()]=true; });
+addEventListener('keyup', e=>{ keys[e.key.toLowerCase()]=false; });
+
+// ================= colors / material =================
+const NAMED = {
+  red:'#e2574c', blue:'#3b8bd4', green:'#5aab5a', yellow:'#f2c037', white:'#f4f4ee',
+  black:'#33342f', pink:'#e985a6', purple:'#8e7cc3', orange:'#ef8b2c', brown:'#8a5a3b',
+  gray:'#9aa0a6', grey:'#9aa0a6', teal:'#1d9e75', gold:'#d6a93a', lava:'#ff5a2c',
+  '红':'#e2574c','蓝':'#3b8bd4','绿':'#5aab5a','黄':'#f2c037','白':'#f4f4ee','黑':'#33342f',
+  '粉':'#e985a6','紫':'#8e7cc3','橙':'#ef8b2c','棕':'#8a5a3b','褐':'#8a5a3b','灰':'#9aa0a6',
+  '青':'#1d9e75','金':'#d6a93a'
+};
+function col(c, def){ if(!c) return def; c=(''+c).trim();
+  if(c[0]==='#') return c; const k=c.toLowerCase();
+  if(NAMED[k]) return NAMED[k]; for(const ch of c) if(NAMED[ch]) return NAMED[ch]; return def; }
+function mat(c, o={}){ return new THREE.MeshStandardMaterial(Object.assign({ color:c, roughness:0.85, flatShading:true }, o)); }
+function shadowAll(g){ g.traverse(o=>{ if(o.isMesh) o.castShadow=true; }); return g; }
+
+// ================= preset builders =================
+const BUILD = {
+  tree(c){ const g=new THREE.Group();
+    const t=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.22,1.2,7), mat('#8a5a3b')); t.position.y=0.6; g.add(t);
+    const f1=new THREE.Mesh(new THREE.ConeGeometry(1.05,1.8,8), mat(col(c,'#4f9d54'))); f1.position.y=2.0;
+    const f2=new THREE.Mesh(new THREE.ConeGeometry(0.8,1.4,8), mat(col(c,'#5aab5a'))); f2.position.y=2.9;
+    g.add(f1,f2); return shadowAll(g); },
+  house(c){ const g=new THREE.Group();
+    const b=new THREE.Mesh(new THREE.BoxGeometry(2,1.6,2), mat(col(c,'#e8ddc8'))); b.position.y=0.8;
+    const r=new THREE.Mesh(new THREE.ConeGeometry(1.7,1.3,4), mat('#b4543b')); r.position.y=2.25; r.rotation.y=Math.PI/4;
+    const d=new THREE.Mesh(new THREE.BoxGeometry(0.55,0.95,0.1), mat('#6b4a32')); d.position.set(0,0.48,1.0);
+    g.add(b,r,d); return shadowAll(g); },
+  tower(c){ const g=new THREE.Group();
+    const b=new THREE.Mesh(new THREE.CylinderGeometry(0.85,1.0,4.2,10), mat(col(c,'#cfc7b6'))); b.position.y=2.1;
+    const r=new THREE.Mesh(new THREE.ConeGeometry(1.25,1.6,10), mat('#7a8fb0')); r.position.y=5.0;
+    g.add(b,r); return shadowAll(g); },
+  mountain(c){ const g=new THREE.Group();
+    const m=new THREE.Mesh(new THREE.ConeGeometry(5,6.5,6), mat(col(c,'#9b9382'))); m.position.y=3.25;
+    const cap=new THREE.Mesh(new THREE.ConeGeometry(2.0,2.0,6), mat('#f3f3ee')); cap.position.y=5.4;
+    g.add(m,cap); return shadowAll(g); },
+  water(c){ const g=new THREE.Group();
+    const w=new THREE.Mesh(new THREE.CircleGeometry(4.2,28),
+      new THREE.MeshStandardMaterial({ color:col(c,'#4aa3d6'), roughness:0.25, metalness:0.1, transparent:true, opacity:0.88 }));
+    w.rotation.x=-Math.PI/2; w.position.y=0.06; g.add(w); return g; },
+  rock(c){ const g=new THREE.Group();
+    const r=new THREE.Mesh(new THREE.IcosahedronGeometry(0.95,0), mat(col(c,'#9aa0a6'))); r.position.y=0.75; r.rotation.set(0.4,0.8,0.2);
+    g.add(r); return shadowAll(g); },
+  flower(c){ const g=new THREE.Group();
+    const s=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,1,5), mat('#4f9d54')); s.position.y=0.5;
+    const h=new THREE.Mesh(new THREE.SphereGeometry(0.32,10,8), mat(col(c,'#e985a6'))); h.position.y=1.05;
+    const cr=new THREE.Mesh(new THREE.SphereGeometry(0.14,8,6), mat('#f2c037')); cr.position.y=1.05;
+    g.add(s,h,cr); return shadowAll(g); },
+  person(c){ const g=new THREE.Group();
+    const b=new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.38,1.1,8), mat(col(c,'#5a82c4'))); b.position.y=0.55;
+    const h=new THREE.Mesh(new THREE.SphereGeometry(0.34,12,10), mat('#e8b98f')); h.position.y=1.32;
+    g.add(b,h); return shadowAll(g); },
+  box(c){ const g=new THREE.Group(); const m=new THREE.Mesh(new THREE.BoxGeometry(1.3,1.3,1.3), mat(col(c,'#d99a4e'))); m.position.y=0.65; g.add(m); return shadowAll(g); },
+  sphere(c){ const g=new THREE.Group(); const m=new THREE.Mesh(new THREE.SphereGeometry(0.85,18,14), mat(col(c,'#7c6fd0'))); m.position.y=0.85; g.add(m); return shadowAll(g); },
+  cylinder(c){ const g=new THREE.Group(); const m=new THREE.Mesh(new THREE.CylinderGeometry(0.6,0.6,1.5,14), mat(col(c,'#46b59c'))); m.position.y=0.75; g.add(m); return shadowAll(g); },
+  cone(c){ const g=new THREE.Group(); const m=new THREE.Mesh(new THREE.ConeGeometry(0.85,1.7,16), mat(col(c,'#e2574c'))); m.position.y=0.85; g.add(m); return shadowAll(g); }
+};
+
+// ===== custom builder: 用基本形状现拼一个新物体 =====
+function buildCustom(parts){
+  const g=new THREE.Group();
+  (parts||[]).slice(0,14).forEach(p=>{
+    const c=col(p.color,'#b9b6ac');
+    const shape=(p.shape||'box').toLowerCase();
+    const s=(Array.isArray(p.size)?p.size:[]).map(n=>Math.max(0.05, Math.min(14, +n||1)));
+    const pos=Array.isArray(p.pos)?p.pos:[0,0,0];
+    const yBase=+pos[1]||0; let mesh, h=1;
+    if(shape==='cone'){ const r=s[0]||1; h=s[1]||2; mesh=new THREE.Mesh(new THREE.ConeGeometry(r,h, p.seg||10), mat(c)); }
+    else if(shape==='cylinder'){ const r=s[0]||0.6; h=s[1]||1.4; mesh=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h, p.seg||14), mat(c)); }
+    else if(shape==='sphere'){ const r=s[0]||0.8; h=r*2; mesh=new THREE.Mesh(new THREE.SphereGeometry(r,16,12), mat(c)); }
+    else if(shape==='torus'){ const r=s[0]||1, tube=s[1]||Math.max(0.12,r*0.3); h=tube*2; mesh=new THREE.Mesh(new THREE.TorusGeometry(r,tube,10,22), mat(c)); }
+    else { const w=s[0]||1, hh=s[1]||1, d=s[2]||s[0]||1; h=hh; mesh=new THREE.Mesh(new THREE.BoxGeometry(w,hh,d), mat(c)); }
+    mesh.position.set(+pos[0]||0, yBase + h/2, +pos[2]||0);
+    mesh.castShadow=true; g.add(mesh);
+  });
+  // 自动落地 + 水平居中:不管模型给的 pos 多离谱(常把零件全堆在 y=6),
+  // 都把整个物体的最低点贴到 y=0、水平中心对到 (0,0),保证它稳稳站在地面上。
+  if(g.children.length){
+    const box=new THREE.Box3().setFromObject(g);
+    const dx=(box.min.x+box.max.x)/2, dy=box.min.y, dz=(box.min.z+box.max.z)/2;
+    if(isFinite(dx)&&isFinite(dy)&&isFinite(dz))
+      g.children.forEach(m=>{ m.position.x-=dx; m.position.y-=dy; m.position.z-=dz; });
+  }
+  return g;
+}
+
+// ================= world =================
+const growing=[]; let objectCount=0;
+const footprints=[];                 // 已占用的圆形地块 {x,z,r},用来避免新物体跟旧物体重叠
+const world=[];                      // 世界存档:每个已放置物体的"配方",用于持久化/删除/撤销
+const countEl=document.getElementById('count');
+const AREAS={ center:[0,0], north:[0,-26], south:[0,26], east:[26,0], west:[-26,0],
+  northeast:[20,-20], northwest:[-20,-20], southeast:[20,20], southwest:[-20,20] };
+function easeOutBack(t){ const c1=1.70158,c3=c1+1; return 1+c3*Math.pow(t-1,3)+c1*Math.pow(t-1,2); }
+function updateCount(){ countEl.textContent=`世界里有 ${objectCount} 个物体`; }
+
+// 拒绝采样:在 (cx,cz) 附近找一个不跟现有物体重叠的落点;找不到就放宽搜索半径
+function findSpot(cx,cz,spread,r){
+  for(let k=0;k<26;k++){
+    const a=Math.random()*Math.PI*2, d=Math.random()*(spread + k*0.7);
+    const x=Math.max(-46, Math.min(46, cx+Math.cos(a)*d));
+    const z=Math.max(-46, Math.min(46, cz+Math.sin(a)*d));
+    // *0.85:允许树丛、花丛轻微交叠,看起来更自然;实心物体则基本不撞
+    if(footprints.every(f=> Math.hypot(f.x-x, f.z-z) > (f.r+r)*0.85)) return [x,z];
+  }
+  const a=Math.random()*Math.PI*2, d=Math.random()*spread;
+  return [Math.max(-46,Math.min(46,cx+Math.cos(a)*d)), Math.max(-46,Math.min(46,cz+Math.sin(a)*d))];
+}
+
+function buildFromRec(rec){
+  return rec.kind==='custom' ? buildCustom(rec.parts) : (BUILD[rec.type] ? BUILD[rec.type](rec.color) : null);
+}
+// 把一条"配方"变成 3D 物体加入场景。anim=true 播放生长动画,加载存档时 false 直接显示。
+function spawn(rec, anim, delay=0){
+  const g=buildFromRec(rec); if(!g) return null;
+  g.userData.rec=rec; g.userData.s=rec.s;
+  g.userData.kind = rec.kind==='custom' ? 'custom' : rec.type;
+  g.userData.phase = Math.random()*Math.PI*2;            // 摆动相位,让每棵树错峰
+  g.position.set(rec.x, 0, rec.z); g.rotation.y=rec.rot;
+  if(anim){ g.scale.setScalar(0.001); growing.push({ g, t:-delay }); }
+  else g.scale.setScalar(rec.s);
+  if(g.userData.kind==='person') g.userData.wander={ a:Math.random()*Math.PI*2, t:0 };
+  scene.add(g); footprints.push({ x:rec.x, z:rec.z, r:rec.r });
+  objectCount++; updateCount();
+  return g;
+}
+
+function place(item){
+  const type=item.type;
+  if(type==='custom' && (!item.parts || !item.parts.length)) return;
+  if(type!=='custom' && !BUILD[type]) return;
+  const count=Math.max(1, Math.min(15, (item.count|0)||1));
+  const scale=Math.max(0.4, Math.min(3, +item.scale||1));
+  const center=AREAS[item.area] || [(Math.random()-0.5)*50,(Math.random()-0.5)*50];
+  const spread=3+count*0.9;
+  for(let i=0;i<count;i++){
+    const s=scale*(0.85+Math.random()*0.3);
+    // 先建一次量占地半径(x/z 方向最大跨度的一半,旋转无关),再找不重叠的落点
+    const probe=type==='custom' ? buildCustom(item.parts) : BUILD[type](item.color);
+    const box=new THREE.Box3().setFromObject(probe);
+    const r=(Math.max(box.max.x-box.min.x, box.max.z-box.min.z)/2)*s || 1;
+    const [x,z]=findSpot(center[0], center[1], spread, r);
+    const rec={ kind:type==='custom'?'custom':'preset', type, color:item.color||null,
+      parts:type==='custom'?item.parts:null, x, z, s, r, rot:Math.random()*Math.PI*2 };
+    world.push(rec); spawn(rec, true, i*0.05);
+  }
+  saveWorld();
+}
+function runPlan(plan){ let n=0; for(const it of plan){ if(it&&it.type){ place(it); n++; } } return n; }
+
+function findGroupByRec(rec){ return scene.children.find(o=>o.isGroup && o.userData.rec===rec); }
+function removeGroup(g){
+  if(!g) return; scene.remove(g);
+  const rec=g.userData.rec;
+  const wi=world.indexOf(rec); if(wi>=0) world.splice(wi,1);
+  const fi=footprints.findIndex(f=>f.x===rec.x && f.z===rec.z && f.r===rec.r); if(fi>=0) footprints.splice(fi,1);
+  const gi=growing.findIndex(it=>it.g===g); if(gi>=0) growing.splice(gi,1);
+  objectCount=Math.max(0, objectCount-1); updateCount(); saveWorld();
+}
+function undoLast(){ if(!world.length) return false; removeGroup(findGroupByRec(world[world.length-1])); return true; }
+
+function clearWorld(){ [...scene.children].forEach(o=>{ if(o.isGroup) scene.remove(o); });
+  growing.length=0; footprints.length=0; world.length=0; objectCount=0; updateCount(); saveWorld(); }
+
+// ---- 本地存档:刷新不丢 ----
+function saveWorld(){ try{ localStorage.setItem('textworld', JSON.stringify(
+  world.map(r=>({ kind:r.kind, type:r.type, color:r.color, parts:r.parts, x:r.x, z:r.z, s:r.s, r:r.r, rot:r.rot })))); }catch(e){} }
+function loadWorld(){
+  let data; try{ data=JSON.parse(localStorage.getItem('textworld')||'null'); }catch(e){ data=null; }
+  if(!Array.isArray(data) || !data.length) return false;
+  data.forEach(rec=>{ world.push(rec); spawn(rec, false); });
+  return true;
+}
+
+// ================= Ollama =================
+const OLLAMA = "http://localhost:11434";
+const modelInput=document.getElementById('model');
+const dotEl=document.getElementById('dot'), connTxt=document.getElementById('conntxt');
+let MODEL = modelInput.value.trim();
+
+// 在混合策略里,模型只负责"现编一个预设里没有的新物体"(已知词早被关键词引擎接走了),
+// 所以这里把它当造型师用,prompt 聚焦单个 custom 物体——这样输出非空、也最稳。
+const SYS = `你是3D造型师。用户会说一个预设里没有的东西,你用基本形状把它拼成一个能认出来的3D物体。只输出JSON:
+{"objects":[{"type":"custom","count":1,"area":"random","parts":[{"shape":"cone|cylinder|box|sphere|torus","color":"颜色","size":[数值],"pos":[x,y,z]}]}]}
+要点:
+- 用 2~8 个 part 拼出大致形态(身体/头/腿/顶等),让人能认出来,各 part 的 pos 要错开、不要堆在同一点。
+- shape 只能是 cone cylinder box sphere torus。size:cone和cylinder=[半径,高],box=[宽,高,深],sphere=[半径],torus=[半径,粗细](圆环/拱形/轮子/光圈)。
+- pos 是相对坐标,x左右、y上下(从 0 往上叠)、z前后,part 底部贴在 pos.y;整体高度不超过 6 米。
+- color 用十六进制(如"#e2574c")或中文颜色词。说"一群/几只/一片"时 count 用 3~6,否则 1。`;
+
+const setupEl=document.getElementById('setup');
+let connected=false;
+function setDot(cls, txt){ dotEl.className='dot'+(cls?' '+cls:''); connTxt.textContent=txt;
+  setupEl.classList.toggle('show', cls==='err'); connected=(cls==='ok'); }
+
+// fetch with timeout, so a hung/blocked request doesn't freeze the UI forever
+async function fetchT(url, opt={}, ms=20000){
+  const ac=new AbortController(); const id=setTimeout(()=>ac.abort(), ms);
+  try{ return await fetch(url, { ...opt, signal:ac.signal }); }
+  finally{ clearTimeout(id); }
+}
+
+async function checkConn(){
+  MODEL = modelInput.value.trim() || MODEL;
+  setDot('', '正在连接 Ollama…');
+  try{
+    const r = await fetchT(OLLAMA+"/api/tags", {}, 6000);
+    if(!r.ok) throw new Error('http '+r.status);
+    const d = await r.json();
+    const names = (d.models||[]).map(m=>m.name);
+    // 模型名可能带或不带 :latest,做个宽松匹配
+    const base = MODEL.split(':')[0];
+    if(names.includes(MODEL) || names.some(n=>n.split(':')[0]===base))
+      setDot('ok', '已连接 · '+MODEL);
+    else setDot('warn', '已连上,但没装 '+MODEL+'(运行 ollama pull '+MODEL+')');
+  }catch(e){
+    // TypeError/AbortError = 网络层失败,几乎都是 Ollama 没开或 CORS(OLLAMA_ORIGINS)
+    setDot('err', '未连接 · 见下方说明');
+  }
+}
+
+async function ollamaPlan(text){
+  const res = await fetchT(OLLAMA+"/api/chat", {
+    method:"POST", headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({
+      model: MODEL, stream:false, format:"json",
+      // 实测:think:false 时 qwen3:4b 会照抄示例/罗列清单、几乎不看输入;
+      // 只有开启思考(think:true)才会真正按用户这句话推理。代价是慢(约20~40秒)。
+      think:true,
+      options:{ temperature:0.3, num_predict:1200 },
+      messages:[
+        { role:"system", content:SYS },
+        { role:"user", content:text }
+      ]
+    })
+  }, 90000);
+  if(!res.ok) throw new Error("ollama "+res.status);
+  const data = await res.json();
+  let txt = (data.message && data.message.content) || "";
+  txt = txt.replace(/<think>[\s\S]*?<\/think>/gi,"").replace(/```json/gi,"").replace(/```/g,"").trim();
+  // 容错:截取第一个 { 到最后一个 } 之间的内容
+  const a=txt.indexOf('{'), b=txt.lastIndexOf('}');
+  if(a>=0 && b>a) txt=txt.slice(a, b+1);
+  const obj = JSON.parse(txt);
+  const arr = Array.isArray(obj) ? obj : (obj.objects || obj.items || []);
+  if(!Array.isArray(arr) || !arr.length) throw new Error("empty");
+  return arr;
+}
+
+// ================= 云端 API(OpenAI 兼容)=================
+// 强模型不会照抄示例,所以这里用"全场景"提示词:一句话里的每样东西都让模型自己规划,
+// 预设能用就用、用不到再 custom 现拼。本地 qwen3:4b 走的是上面的混合策略,两者互不影响。
+const FULL_SYS = `你是3D世界生成器。把用户的中文描述转成JSON,只输出一个JSON对象 {"objects":[...]}。
+把句子里提到的每样东西各做成一个元素(不多不少),按句子里的方位词给 area。
+能用预设就用预设,type 只能是:tree house tower mountain water rock flower person box sphere cylinder cone。
+预设里没有的东西(动物/火山/桥/车…)用 {"type":"custom","count":整数,"area":方位,"parts":[{"shape":"cone|cylinder|box|sphere|torus","color":颜色,"size":[..],"pos":[x,y,z]}]} 现拼;parts 的 pos 要错开别堆在一起,整体高度<8米,torus 可做拱形/轮子/圆环。
+count:几/一片/一群/树林=5~12,一/一座/一个=1,有数字按数字。color 用十六进制或中文颜色词。
+area:center north south east west northeast northwest southeast southwest random,多个物体分散到不同方位。
+示例 "湖边三棵树和一座红房子":{"objects":[{"type":"water","count":1,"area":"center"},{"type":"tree","count":3,"area":"west"},{"type":"house","count":1,"color":"红","area":"north"}]}`;
+
+const cloudUrl=document.getElementById('cloudUrl'), cloudKey=document.getElementById('cloudKey'), cloudModel=document.getElementById('cloudModel');
+function cloudCfg(){ return { url:(cloudUrl.value||'').trim().replace(/\/+$/,''), key:(cloudKey.value||'').trim(), model:(cloudModel.value||'').trim() }; }
+function cloudReady(){ const c=cloudCfg(); return !!(c.url && c.key && c.model); }
+async function cloudPlan(text){
+  const c=cloudCfg();
+  const res=await fetchT(c.url+"/chat/completions", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json", "Authorization":"Bearer "+c.key },
+    body: JSON.stringify({ model:c.model, temperature:0.5, response_format:{ type:"json_object" },
+      messages:[ { role:"system", content:FULL_SYS }, { role:"user", content:text } ] })
+  }, 60000);
+  if(!res.ok) throw new Error("cloud "+res.status);
+  const data=await res.json();
+  let txt=(data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
+  txt=txt.replace(/```json/gi,"").replace(/```/g,"").trim();
+  const a=txt.indexOf('{'), b=txt.lastIndexOf('}'); if(a>=0 && b>a) txt=txt.slice(a, b+1);
+  const obj=JSON.parse(txt);
+  const arr=Array.isArray(obj) ? obj : (obj.objects || obj.items || []);
+  if(!Array.isArray(arr) || !arr.length) throw new Error("empty");
+  return arr;
+}
+
+// ===== 本地关键词兜底(连不上 Ollama 时也能玩) =====
+const VOLCANO = { type:'custom', count:1, parts:[
+  {shape:'cone', color:'#8a5a3b', size:[5,6], pos:[0,0,0]},
+  {shape:'cone', color:'#5a352e', size:[2,1.4], pos:[0,5.2,0]},
+  {shape:'cone', color:'#ff5a2c', size:[1.1,1.6], pos:[0,5.8,0]} ]};
+const KW = [
+  [/火山|volcano/i, ()=>JSON.parse(JSON.stringify(VOLCANO))],
+  [/森林|树林|forest|trees/i, ()=>({type:'tree',count:10})],
+  [/树|tree/i, ()=>({type:'tree',count:3})],
+  [/城堡|塔|tower|castle/i, ()=>({type:'tower',count:1})],
+  [/房|屋|家|house|home|cabin/i, ()=>({type:'house',count:1})],
+  [/雪山|高山|山脉|山|mountain|hill/i, ()=>({type:'mountain',count:1})],
+  [/湖|池|河|海|水|lake|pond|water|river|sea/i, ()=>({type:'water',count:1})],
+  [/石|岩|rock|stone/i, ()=>({type:'rock',count:4})],
+  [/花|flower/i, ()=>({type:'flower',count:8})],
+  [/人|person|people/i, ()=>({type:'person',count:2})],
+  [/球|sphere|ball/i, ()=>({type:'sphere',count:2})],
+  [/箱|盒|方块|box|cube/i, ()=>({type:'box',count:3})]
+];
+function hasKeyword(text){ return KW.some(([re])=>re.test(text)); }
+function localPlan(text){
+  const plan=[];
+  for(const [re, make] of KW){ if(re.test(text)){ const o=make(); if(o.type!=='custom') o.color=col(text,null); plan.push(o); } }
+  if(!plan.length) plan.push({ type:['box','sphere','cylinder','cone'][Math.floor(Math.random()*4)], count:4 });
+  return plan;
+}
+
+// ================= UI =================
+const q=document.getElementById('q'), go=document.getElementById('go'), statusEl=document.getElementById('status');
+let st;
+function status(msg, hold=2400){ statusEl.textContent=msg; statusEl.classList.add('show');
+  clearTimeout(st); st=setTimeout(()=>statusEl.classList.remove('show'), hold); }
+
+// 混合策略:
+// 认得的词(树/山/湖/火山/房子…)→ 走本地关键词引擎,瞬间、稳定、可拆多物体;
+// 认不出的新词(羊/狗/桥…)→ 才交给 qwen3:4b 现编一个 custom 形状(再差也比随机方块贴题)。
+// 这样把两边的长处各用在刀刃上,绕开了 qwen3:4b 在结构化生成上的不稳定。
+async function submit(){
+  const text=q.value.trim(); if(!text) return;
+  go.disabled=true; go.textContent='生成中…';
+  let plan, via;
+  if(engineSel.value==='cloud' && cloudReady()){
+    // 云端强模型:整句场景都交给它(预设+custom 自由规划),失败再退回关键词
+    status('云端模型生成中…', 60000);
+    try { plan=await cloudPlan(text); via='cloud'; }
+    catch(e){ plan=localPlan(text); via='cloud-fail'; }
+  } else {
+    // 本地 qwen3:4b:混合策略——认得的词走关键词,新词才交给模型现编
+    const recognized=hasKeyword(text);
+    if(recognized){ plan=localPlan(text); via='kw'; }
+    else if(connected){
+      status('遇到新事物,本地模型现编中…(qwen3 约 20~40 秒)', 90000);
+      try { plan=await ollamaPlan(text); via='ollama'; }
+      catch(e){ plan=localPlan(text); via='kw-fallback'; }
+    } else { plan=localPlan(text); via='kw-offline'; }
+  }
+  const n=runPlan(plan);
+  const msg = !n ? '没太懂,换个说法试试'
+    : via==='cloud'      ? '生成完成 · 云端模型'
+    : via==='cloud-fail' ? '云端没连上,改用关键词生成'
+    : via==='ollama'     ? '生成完成 · 本地模型现编'
+    : via==='kw'         ? '生成完成'
+    : via==='kw-fallback'? '模型没编出来,先放个占位形状'
+    :                      'Ollama 未连接,用关键词生成';
+  status(msg);
+  q.value=''; go.disabled=false; go.textContent='生成'; q.focus();
+}
+go.addEventListener('click', submit);
+q.addEventListener('keydown', e=>{ if(e.key==='Enter') submit(); });
+document.getElementById('reconnect').addEventListener('click', checkConn);
+modelInput.addEventListener('keydown', e=>{ if(e.key==='Enter') checkConn(); });
+document.getElementById('clear').addEventListener('click', ()=>{ clearWorld(); status('世界已清空'); });
+
+// ===== 引擎切换(本地 Ollama / 云端 API)+ 云端配置持久化 =====
+const engineSel=document.getElementById('engine');
+const rowOllama=document.getElementById('rowOllama'), cloudCfgEl=document.getElementById('cloudCfg');
+function saveCloudCfg(){ try{ localStorage.setItem('tw-engine', JSON.stringify({
+  engine:engineSel.value, url:cloudUrl.value, key:cloudKey.value, model:cloudModel.value })); }catch(e){} }
+function loadCloudCfg(){ try{ const c=JSON.parse(localStorage.getItem('tw-engine')||'null'); if(c){
+  engineSel.value=c.engine||'ollama'; cloudUrl.value=c.url||''; cloudKey.value=c.key||''; cloudModel.value=c.model||''; } }catch(e){} }
+function updateEngineUI(){
+  const cloud=engineSel.value==='cloud';
+  rowOllama.style.display=cloud?'none':'flex'; cloudCfgEl.style.display=cloud?'block':'none';
+  if(cloud) setDot(cloudReady()?'ok':'warn', cloudReady()?'云端就绪 · '+cloudCfg().model:'填好 API 地址/Key/模型');
+  else checkConn();
+}
+engineSel.addEventListener('change', ()=>{ saveCloudCfg(); updateEngineUI(); });
+document.getElementById('cloudSave').addEventListener('click', ()=>{ saveCloudCfg(); updateEngineUI(); status(cloudReady()?'云端配置已保存':'还差信息没填完'); });
+[cloudUrl,cloudKey,cloudModel].forEach(el=>el.addEventListener('change', saveCloudCfg));
+
+// ===== 撤销 / 删除(点选物体)=====
+document.getElementById('undo').addEventListener('click', ()=>{ status(undoLast()?'撤销了上一个':'没有可撤销的了'); });
+let delMode=false; const delBtn=document.getElementById('del');
+delBtn.addEventListener('click', ()=>{ delMode=!delMode; delBtn.classList.toggle('active', delMode);
+  delBtn.textContent='删除:'+(delMode?'开':'关'); dom.style.cursor=delMode?'crosshair':'default';
+  status(delMode?'删除模式:点物体删掉它':'退出删除模式'); });
+const _ray=new THREE.Raycaster(), _ndc=new THREE.Vector2(); let _down=null;
+dom.addEventListener('pointerdown', e=>{ _down={x:e.clientX, y:e.clientY, id:e.pointerId}; });
+dom.addEventListener('pointerup', e=>{
+  if(delMode && _down && _down.id===e.pointerId && Math.hypot(e.clientX-_down.x, e.clientY-_down.y)<6){
+    _ndc.x=(e.clientX/innerWidth)*2-1; _ndc.y=-(e.clientY/innerHeight)*2+1; _ray.setFromCamera(_ndc, camera);
+    const hits=_ray.intersectObjects(scene.children.filter(o=>o.isGroup), true);
+    if(hits.length){ let g=hits[0].object; while(g && !g.userData.rec) g=g.parent; if(g){ removeGroup(g); status('删掉一个'); } }
+  }
+  _down=null;
+});
+
+const SCENES = [
+  [{type:'custom',count:1,area:'north',parts:VOLCANO.parts},{type:'tree',count:10,area:'north'},{type:'water',count:1,area:'center'},{type:'house',count:2,area:'south'}],
+  [{type:'tower',count:1,area:'center'},{type:'house',count:5},{type:'tree',count:8},{type:'person',count:4}],
+  [{type:'water',count:2},{type:'rock',count:8},{type:'tree',count:6},{type:'flower',count:12}]
+];
+document.getElementById('surprise').addEventListener('click', ()=>{ clearWorld();
+  runPlan(JSON.parse(JSON.stringify(SCENES[Math.floor(Math.random()*SCENES.length)]))); status('给你一片随机风景'); });
+
+// ================= seed + loop =================
+loadCloudCfg();
+// 有存档就还原上次的世界,否则给一个初始种子场景
+if(!loadWorld()) runPlan([
+  {type:'tree',count:5,area:'west'},
+  {type:'mountain',count:1,area:'north'},
+  {type:'water',count:1,area:'east'},
+  {type:'house',count:1,area:'center'},
+  {type:'flower',count:6,area:'south'}
+]);
+updateEngineUI();   // 按所选引擎刷新连接状态(本地会顺带 checkConn)
+
+// 昼夜天色用到的两种颜色(预先创建,避免每帧分配)
+const SKY_DAY=new THREE.Color('#bfe3f0'), SKY_DUSK=new THREE.Color('#f4d8b4');
+const clock=new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),0.05), time=clock.elapsedTime;
+  const fwd=new THREE.Vector3(Math.cos(theta),0,Math.sin(theta));
+  const right=new THREE.Vector3(-Math.sin(theta),0,Math.cos(theta));
+  const sp=26*dt; let moved=false;
+  if(keys['w']||keys['arrowup']){ target.addScaledVector(fwd,sp); moved=true; }
+  if(keys['s']||keys['arrowdown']){ target.addScaledVector(fwd,-sp); moved=true; }
+  if(keys['a']||keys['arrowleft']){ target.addScaledVector(right,-sp); moved=true; }
+  if(keys['d']||keys['arrowright']){ target.addScaledVector(right,sp); moved=true; }
+  if(moved) updateCam();
+  for(let i=growing.length-1;i>=0;i--){ const it=growing[i]; it.t+=dt*2.6;
+    if(it.t<0) continue; const tt=Math.min(it.t,1);
+    it.g.scale.setScalar(Math.max(0.001, easeOutBack(tt)*it.g.userData.s));
+    if(it.t>=1){ it.g.scale.setScalar(it.g.userData.s); growing.splice(i,1); } }
+
+  // ===== 环境动效:缓慢昼夜 + 树木摇曳 + 水面起伏 + 小人散步 =====
+  const day=(Math.sin(time*0.05)+1)/2;                 // 0(黄昏)~1(正午),约 125 秒一轮
+  sun.intensity=0.6+day*0.55; hemi.intensity=0.68+day*0.34;
+  scene.background.copy(SKY_DAY).lerp(SKY_DUSK,(1-day)*0.55); scene.fog.color.copy(scene.background);
+  for(const o of scene.children){
+    if(!o.isGroup) continue; const k=o.userData.kind, ph=o.userData.phase||0;
+    if(k==='tree'||k==='flower'||k==='custom'){ o.rotation.z=Math.sin(time*1.3+ph)*0.025; }
+    else if(k==='water'){ o.position.y=Math.sin(time*1.1+ph)*0.07; }
+    else if(k==='person' && o.userData.wander){
+      const w=o.userData.wander; w.t-=dt;
+      if(w.t<=0){ w.a+=(Math.random()-0.5)*1.6; w.t=1.2+Math.random()*2.2; }
+      const step=1.3*dt;
+      o.position.x=Math.max(-46,Math.min(46, o.position.x+Math.cos(w.a)*step));
+      o.position.z=Math.max(-46,Math.min(46, o.position.z+Math.sin(w.a)*step));
+      o.rotation.y=-w.a+Math.PI/2; o.position.y=Math.abs(Math.sin(time*6+ph))*0.06;  // 走路小颠簸
+    }
+  }
+  renderer.render(scene,camera);
+}
+animate();
+addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+</script>
+</body>
+</html>

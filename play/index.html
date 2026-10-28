@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>文字生成世界</title>
+<script>
+  /* Collect every JS error (including failed <script> loads) for the self-test. */
+  window.__errors = [];
+  window.addEventListener("error", function (e) {
+    var t = e.target;
+    if (t && t !== window && (t.src || t.href)) window.__errors.push("load failed: " + (t.src || t.href));
+    else window.__errors.push(String(e.message || e.error || e));
+  }, true);
+  window.addEventListener("unhandledrejection", function (e) { window.__errors.push("promise: " + e.reason); });
+</script>
+<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/mobile.css">
+</head>
+<body>
+<header id="top">
+  <div class="brand"><span class="logo" aria-hidden="true">⛰</span><span id="app-title">文字生成世界</span></div>
+  <nav id="tabs" role="tablist" aria-label="模式">
+    <button class="tab" role="tab" data-mode="watch" data-tip="自动打一句话，看它怎么被理解、怎么变成 3D 场景（打开时的默认模式）">观看</button>
+    <button class="tab" role="tab" data-mode="build" data-tip="自己输入一句中文描述，生成你的世界" data-anim="type">我来造</button>
+    <button class="tab" role="tab" data-mode="practice" data-tip="跟着任务清单一步步试，完成一项自动打勾">练习</button>
+  </nav>
+  <div class="spacer"></div>
+  <label class="switch" data-tip="把右边的理解面板放大（左右比例 35:65），适合投影；快捷键 B"><input type="checkbox" id="ck-big"> 大屏模式</label>
+  <button id="btn-help" class="round" title="操作说明（H）" aria-label="操作说明">?</button>
+  <button id="btn-exit" class="exit" data-tip="停止所有计算并关闭页面">退出</button>
+  <!-- 手机：头部压成一行，其余入口收进 ☰ 菜单（css/mobile.css 里只在 body.touchp 下显示） -->
+  <button id="menu-btn" type="button" aria-label="菜单" aria-expanded="false" aria-controls="menu">☰</button>
+  <div id="menu" role="menu" hidden>
+    <button role="menuitem" type="button" id="menu-help">操作说明</button>
+    <button role="menuitem" type="button" id="menu-panel">看解析</button>
+    <button role="menuitem" type="button" id="menu-opts">选项与任务</button>
+    <button role="menuitem" type="button" id="menu-view">视角复位</button>
+    <div class="sep"></div>
+    <button role="menuitem" type="button" id="menu-exit">退出</button>
+  </div>
+</header>
+
+<main id="main">
+  <section id="left">
+    <div class="card view-card">
+      <div class="pills" id="pills"></div>
+      <div id="view"></div>
+      <span class="view-help" data-tip="在 3D 画面里：按住拖动 = 转视角；滚轮（触控板双指）= 缩放；W A S D 或方向键 = 走动。点一下物体，右栏 ③ 显示它的图元" data-anim="drag">怎么转视角？</span>
+      <div id="view-hint" hidden></div>
+    </div>
+    <div class="card" id="controls"></div>
+    <div id="mob-bar" aria-label="手机操作">
+      <button class="mbtn primary" id="mob-panel" type="button">看解析</button>
+      <button class="mbtn" id="mob-opts" type="button">选项</button>
+      <span id="mob-explain"></span>
+    </div>
+    <div id="side">
+      <div class="card" id="opts"></div>
+      <div class="card" id="explain"></div>
+    </div>
+  </section>
+
+  <section id="right">
+    <div class="card panel">
+      <div class="panel-head">
+        <div id="formula"><b>理解面板</b><span class="arrow">一句话</span>→<span class="arrow">切分 + 找关键词</span>→<span class="arrow">生成计划</span>→<span class="arrow">图元</span>→<span class="arrow">摆放</span></div>
+        <div class="sub-head" id="engine-line"></div>
+      </div>
+      <div class="sec">
+        <div class="sec-t"><b>① 这句话被怎么理解</b>
+          <span class="legend"><i class="tk-object">物体</i><i class="tk-count">数量</i><i class="tk-dir">方位</i><i class="tk-ref">相对位置</i><i class="tk-color">颜色</i><i class="tk-size">大小</i><i class="tk-unknown">没认出来</i></span></div>
+        <div id="sent" class="sent"></div>
+        <div id="notes"></div>
+      </div>
+      <div class="sec">
+        <div class="sec-t"><b>② 生成计划</b> <span class="muted">每一行 = 一类物体；点一行看它由哪些图元拼成</span>
+          <button id="btn-json" class="mini-btn" data-tip="看引擎交给 3D 场景的原始计划（JSON），格式和完整版里大语言模型输出的一样">看 JSON</button></div>
+        <table class="plan"><thead><tr><th>#</th><th>物体</th><th>数量</th><th>方位</th><th>颜色</th><th>大小</th><th>依据</th></tr></thead><tbody id="plan-body"></tbody></table>
+        <pre id="plan-json" hidden></pre>
+      </div>
+      <div class="sec two">
+        <div class="col-a">
+          <div class="sec-t"><b>③ 图元拆解</b></div>
+          <div id="parts-title" class="parts-title"></div>
+          <canvas id="parts-view" data-tip="侧视图：按真实尺寸画出每个基本图元（横 = 左右，竖 = 高度）"></canvas>
+          <ul id="parts-list"></ul>
+        </div>
+        <div class="col-b">
+          <div class="sec-t"><b>④ 俯视占地图</b> <span class="muted">上 = 北</span></div>
+          <canvas id="map" data-tip="从正上方看：圆 = 每个物体的占地范围；黄色 = 这一句新放的；蓝色虚线 = 区域中心；绿点 = 采用的落点；红 × = 因为和已有物体重叠被拒绝的落点"></canvas>
+          <div id="map-stats" class="map-stats"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer id="foot"></footer>
+
+<!-- 手机：全屏面板的「返回」按钮、横屏提示 -->
+<button id="panel-close" type="button" hidden>返回</button>
+<div id="rotate-hint" role="status"><div><b>竖屏体验更佳</b>把手机竖过来：上面是 3D 世界，下面是输入框和「生成」按钮。<br><button id="rot-ok" type="button">仍然横屏继续</button></div></div>
+
+<div id="help" class="modal" hidden>
+  <div class="modal-box" role="dialog" aria-labelledby="help-title">
+    <h2 id="help-title">30 秒上手</h2>
+    <div class="help-body">
+      <div class="help-cards">
+        <div class="hc touch-only">
+          <svg viewBox="0 0 360 120" role="img" aria-label="触屏操作图解：单指拖动转视角，双指捏合缩放，点一个示例句子再点「生成」">
+            <rect x="6" y="6" width="104" height="70" rx="8" fill="#bfe3f0"/>
+            <polygon points="20,66 44,30 68,66" fill="#4f9d54"/>
+            <rect x="76" y="48" width="18" height="18" fill="#c0392b"/>
+            <polygon points="72,48 85,36 98,48" fill="#8e4a2b"/>
+            <path d="M34 56 Q58 40 86 56" fill="none" stroke="#ffd54f" stroke-width="3" stroke-linecap="round"/>
+            <polygon points="86,56 78,50 80,60" fill="#ffd54f"/>
+            <circle cx="34" cy="56" r="9" fill="#fff" stroke="#ffd54f" stroke-width="3"/>
+            <text x="58" y="100" font-size="12" fill="#dde5ee" text-anchor="middle">单指拖动：转视角</text>
+
+            <rect x="128" y="6" width="104" height="70" rx="8" fill="#bfe3f0"/>
+            <circle cx="166" cy="42" r="9" fill="#fff" stroke="#ffd54f" stroke-width="3"/>
+            <circle cx="194" cy="42" r="9" fill="#fff" stroke="#ffd54f" stroke-width="3"/>
+            <path d="M154 42 L140 42" stroke="#ffd54f" stroke-width="3" stroke-linecap="round"/>
+            <polygon points="138,42 146,36 146,48" fill="#ffd54f"/>
+            <path d="M206 42 L220 42" stroke="#ffd54f" stroke-width="3" stroke-linecap="round"/>
+            <polygon points="222,42 214,36 214,48" fill="#ffd54f"/>
+            <text x="180" y="100" font-size="12" fill="#dde5ee" text-anchor="middle">双指张合：缩放</text>
+
+            <rect x="250" y="12" width="104" height="26" rx="13" fill="#1b2430" stroke="#3a4a60"/>
+            <text x="302" y="30" font-size="12" fill="#dde5ee" text-anchor="middle">湖边三棵树</text>
+            <circle cx="338" cy="34" r="8" fill="#fff" stroke="#ffd54f" stroke-width="3"/>
+            <path d="M302 42 L302 52" stroke="#8fb4dd" stroke-width="2"/>
+            <polygon points="302,56 297,48 307,48" fill="#8fb4dd"/>
+            <rect x="268" y="58" width="68" height="26" rx="8" fill="#2dbd6e"/>
+            <text x="302" y="76" font-size="13" font-weight="bold" fill="#fff" text-anchor="middle">生成</text>
+            <text x="302" y="100" font-size="12" fill="#dde5ee" text-anchor="middle">点示例句子，再点「生成」</text>
+          </svg>
+          <p>上面是 3D 世界：<b>单指拖动</b>转视角，<b>双指张合</b>缩放，点一下物体看它的图元。下面写一句话（或点一个示例句子）再点「生成」。「看解析」全屏打开理解面板，「返回」关闭。</p>
+        </div>
+        <div class="hc"><div class="demo demo-type"><span class="d-text">北边一座火山</span><i class="d-caret"></i></div>
+          <h3>① 看</h3><p>「观看」会自动打一句中文描述。右边先把句子拆开：哪些字是<b class="c-obj">物体</b>、<b class="c-cnt">数量</b>、<b class="c-dir">方位</b>；再变成一份“生成计划”，左边的 3D 世界就照着长出来。</p></div>
+        <div class="hc"><div class="demo demo-grow"><i class="g1"></i><i class="g2"></i><i class="g3"></i></div>
+          <h3>② 写</h3><p>切到「我来造」，自己写一句，比如“湖边三棵树和一座红房子”。每个物体都是用圆锥、圆柱、立方体、球这些<b>基本图元</b>拼出来的。</p></div>
+        <div class="hc kbd-only"><div class="demo demo-drag"><i class="d-ball"></i><i class="d-hand"></i></div>
+          <h3>③ 逛</h3><p>在 3D 画面里<b>拖动</b>转视角，<b>滚轮</b>缩放，<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 走动。左下的“规则档位”可以切回原版，看规则少了一条会差多少。</p></div>
+      </div>
+      <div class="keys-list kbd-only">
+        <span><kbd>回车</kbd> 生成</span><span><kbd>空格</kbd> 观看：暂停 / 继续</span><span><kbd>N</kbd> 观看：下一句</span>
+        <span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 切换模式</span><span><kbd>B</kbd> 大屏模式</span><span><kbd>H</kbd> 或右上角 <kbd>?</kbd> 再看这页</span>
+      </div>
+      <p class="help-foot-note">这是纯静态网页：不联网、不调用任何大模型，句子只由浏览器里的关键词规则引擎理解；关掉标签页就全部结束，不留后台进程。</p>
+    </div>
+    <div class="help-foot"><button id="help-close" class="big-btn" type="button">开始看</button></div>
+  </div>
+</div>
+
+<div id="tip" hidden></div>
+<div id="toast"></div>
+<pre id="selftest" hidden></pre>
+
+<!-- three.js r128（MIT，许可证见 vendor/three.js-LICENSE.txt），本地文件，不走 CDN -->
+<script src="vendor/three.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/credits.js"></script>
+<script src="js/planner.js"></script>
+<script src="js/shapes.js"></script>
+<script src="js/world.js"></script>
+<script src="js/scene3d.js"></script>
+<script src="js/panel.js"></script>
+<script src="js/mobile.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

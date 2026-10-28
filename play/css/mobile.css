@@ -1,0 +1,161 @@
+/* ============================================================================
+   手机竖屏（触屏 + 宽度 ≤ 980px → body.touchp，由 js/mobile.js 加；横屏手机再加 body.touchl）。
+   3D 场景 + 文本输入类布局。用到的类名 / id：
+     body.touch / .touchp / .touchl        设备分类（mobile.js detect）
+     body.m-watch / .m-build / .m-practice 当前模式（app.js 在切换模式时加）
+     body.sheet-panel / .sheet-opts        全屏面板打开（mobile.js sheets）；#panel-close 是共用的「返回」按钮
+     body.rot-ok                           横屏下选择了「仍然横屏继续」
+     #menu-btn #menu                       ☰ 菜单（头部压成一行后其余入口都收在这里：说明 / 看解析 / 选项 / 视角复位 / 退出）
+     #mob-bar .mbtn                        输入区下方的一行按钮（看解析 / 选项或任务）
+     #side                                 左栏的选项 + 说明 / 任务清单（电脑上 display: contents，不改变桌面布局）
+     .touch-only / .kbd-only               说明浮层里只给触屏 / 只给键盘看的内容
+   观看：整页上下滚动，3D 画面贴顶（约 50vh），下面依次是播放控制、理解面板（紧凑）、选项、说明。
+   我来造 / 练习（操作）：一屏 100dvh 不滚动，上方 3D 画面，下方固定输入区（文本框 + 生成 + 示例句子横滚 + 工具行）
+   和「看解析」「选项」按钮；理解面板和选项默认收起，点按钮全屏打开，「返回」关闭。
+   ============================================================================ */
+#menu-btn, #menu, #mob-bar, #panel-close, #rotate-hint, .touch-only { display: none; }
+#side { display: contents; }
+.pressed { filter: brightness(1.2); transform: scale(.97); }
+
+/* 只在手机布局（touchp）下换成触屏说明：带触摸屏的笔记本仍然有键盘和鼠标，照常显示键盘图和悬停提示 */
+body.touchp .touch-only { display: block; }
+body.touchp .kbd-only { display: none !important; }
+body.touchp #tip { display: none !important; }
+body.touchp .view-help { display: none; }
+
+body.touchp { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; touch-action: manipulation; font-size: 14px;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); }
+body.touchp input, body.touchp textarea { -webkit-user-select: text; user-select: text; }
+
+/* ---- 头部压成一行：标题、模式标签、☰ ---- */
+body.touchp #top { gap: 6px; padding: 4px 8px; min-height: 48px; }
+body.touchp .brand { font-size: 14px; letter-spacing: 0; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+body.touchp .brand .logo { display: none; }
+body.touchp .switch, body.touchp #btn-help, body.touchp #btn-exit, body.touchp .spacer { display: none; }
+body.touchp #tabs { margin-left: 0; padding: 2px; gap: 2px; flex: 1 1 auto; justify-content: center; min-width: 0; }
+body.touchp .tab { padding: 8px 6px; font-size: 14px; min-height: 40px; flex: 1 1 0; text-align: center; white-space: nowrap; }
+body.touchp #menu-btn { display: block; margin-left: auto; width: 44px; height: 40px; font-size: 20px; border-radius: 8px; flex: none;
+  border: 1px solid #3a4a60; background: #1e2834; color: var(--text); }
+body.touchp #menu:not([hidden]) { display: grid; position: fixed; z-index: 90; right: 8px; top: calc(env(safe-area-inset-top) + 52px); min-width: 200px;
+  background: var(--panel); border: 1px solid var(--accent); border-radius: 12px; padding: 6px; gap: 2px; box-shadow: 0 8px 24px rgba(0,0,0,.55); }
+#menu button { border: none; background: transparent; font-size: 15px; text-align: left; padding: 10px 14px; min-height: 44px; border-radius: 8px; color: var(--text); }
+#menu button:active { background: #2a3546; }
+#menu .sep { height: 1px; background: var(--line); margin: 4px 0; }
+
+/* ---- 主区：单列 ---- */
+body.touchp #main { display: flex; flex-direction: column; gap: 8px; padding: 6px 8px; overflow: visible; }
+body.touchp #left { display: contents; }
+body.touchp .card { padding: 8px; border-radius: 10px; }
+
+/* 3D 画面：贴顶，按宽度缩放；单指拖动 / 双指缩放（scene3d.js 的 Pointer Events），不让页面跟着滚 */
+body.touchp .view-card { order: 0; padding: 6px; gap: 4px; }
+body.touchp #view { min-height: 160px; touch-action: none; }
+body.touchp .pills { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; touch-action: pan-x; }
+body.touchp .pills::-webkit-scrollbar { display: none; }
+body.touchp .pill { flex: none; font-size: 12px; padding: 3px 9px; }
+body.touchp #view-hint { font-size: 12px; bottom: 10px; max-width: 94%; white-space: normal; text-align: center; }
+body.touchp .nogl { font-size: 13px; padding: 12px; }
+
+/* ---- 输入区 / 播放控制（触控区 ≥ 44px，文本框 16px 防 iOS 自动放大） ---- */
+body.touchp #controls { order: 1; gap: 6px; padding: 8px; flex: none; }
+body.touchp .qrow { gap: 6px; }
+body.touchp .q { font-size: 16px; min-height: 46px; padding: 8px 12px; }
+body.touchp #btn-go { min-height: 46px; min-width: 84px; font-size: 16px; padding: 6px 16px; }
+body.touchp .chips { flex: 0 0 100%; width: 100%; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; touch-action: pan-x;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none; padding: 2px 0; gap: 6px; }
+body.touchp .chips::-webkit-scrollbar { display: none; }
+body.touchp .chip { flex: none; min-height: 40px; font-size: 14px; padding: 6px 14px; }
+body.touchp .tools { flex: 0 0 100%; width: 100%; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; touch-action: pan-x;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none; gap: 6px; }
+body.touchp .tools::-webkit-scrollbar { display: none; }
+body.touchp .tools .btn { flex: none; min-height: 44px; font-size: 14px; padding: 6px 12px; }
+body.touchp #demo-input { flex: 1 1 100%; font-size: 16px; min-height: 44px; }
+body.touchp #controls > .btn { flex: 1 1 auto; min-height: 44px; font-size: 14px; padding: 6px 8px; }
+body.touchp #controls > .ms { flex: 1 1 100%; text-align: center; font-size: 13px; }
+
+/* ---- 输入区下方的一行按钮（看解析 / 选项） ---- */
+body.touchp #mob-bar { display: flex; align-items: center; gap: 6px; padding: 0 2px max(4px, env(safe-area-inset-bottom)); min-height: 48px; flex: none; order: 2; }
+.mbtn { min-height: 44px; min-width: 72px; padding: 0 14px; border: none; border-radius: 10px; background: #2e3947; color: var(--text); font-size: 14px; white-space: nowrap; }
+.mbtn.primary { background: var(--accent); color: #3d2a00; font-weight: bold; }
+#mob-explain { flex: 1; min-width: 0; font-size: 12px; line-height: 1.4; color: var(--muted); overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+#mob-explain b { color: var(--accent); }
+body.touchp.m-watch #mob-bar { display: none; }
+
+/* ---- 观看：整页上下滚动，3D（50vh）→ 播放控制 → 理解面板（紧凑）→ 选项 → 说明 → 页脚 ---- */
+body.touchp.m-watch { height: auto; min-height: 100%; overflow-y: auto; overflow-x: hidden; }
+body.touchp.m-watch #main { flex: none; min-height: 0; }
+body.touchp.m-watch .view-card { flex: none !important; height: 50vh; min-height: 240px; }
+body.touchp.m-watch #right { order: 2; overflow: visible; }
+body.touchp.m-watch #opts { order: 3; }
+body.touchp.m-watch #explain { order: 4; max-height: none; }
+body.touchp.m-watch #foot { order: 5; }
+
+/* ---- 我来造 / 练习：一屏，不滚动 ---- */
+body.touchp:not(.m-watch) { height: 100%; height: 100dvh; overflow: hidden; }
+body.touchp:not(.m-watch) #main { flex: 1; min-height: 0; overflow: hidden; gap: 6px; padding-bottom: 0; }
+body.touchp:not(.m-watch) .view-card { flex: 1 1 0 !important; min-height: 180px; }
+body.touchp:not(.m-watch) #right, body.touchp:not(.m-watch) #opts, body.touchp:not(.m-watch) #explain, body.touchp:not(.m-watch) #foot { display: none; }
+
+/* ---- 全屏面板：「看解析」「选项 / 任务」，「返回」关闭 ---- */
+body.touchp.sheet-panel #right, body.touchp.sheet-opts #side { display: flex; flex-direction: column; gap: 8px; position: fixed; z-index: 85; inset: 0;
+  overflow-y: auto; overflow-x: hidden; background: var(--bg); border: none; border-radius: 0;
+  padding: calc(env(safe-area-inset-top) + 8px) 10px calc(env(safe-area-inset-bottom) + 76px); }
+body.touchp.sheet-opts #side .card { display: block; flex: none; max-height: none; }
+body.touchp.sheet-panel #panel-close, body.touchp.sheet-opts #panel-close { display: block; position: fixed; z-index: 86; left: 50%; transform: translateX(-50%);
+  bottom: calc(env(safe-area-inset-bottom) + 12px); min-width: 150px; min-height: 48px; padding: 0 26px; border: none; background: var(--accent); color: #3d2a00;
+  font-weight: bold; font-size: 16px; border-radius: 24px; box-shadow: 0 6px 18px rgba(0,0,0,.55); }
+body.touchp.sheet-panel .panel, body.touchp.sheet-opts .panel { min-height: 0; }
+
+/* ---- 理解面板的紧凑画法 ---- */
+body.touchp .panel { padding: 8px; gap: 6px; min-height: 0; }
+body.touchp #formula { font-size: 12.5px; }
+body.touchp #formula .arrow { margin: 0 2px; }
+body.touchp .sub-head { font-size: 12.5px; }
+body.touchp .sec-t { font-size: 13px; }
+body.touchp .legend { margin-left: 0; width: 100%; }
+body.touchp .sent { font-size: 17px; line-height: 2.4; letter-spacing: .5px; }
+body.touchp #notes { font-size: 12.5px; }
+body.touchp table.plan { font-size: 12px; }
+body.touchp table.plan th:nth-child(2) { width: 18%; } body.touchp table.plan th:nth-child(4) { width: 17%; }
+body.touchp .sec.two { grid-template-columns: 1fr; }
+body.touchp #parts-view { height: 110px; }
+body.touchp #map { max-height: min(360px, 90vw); }
+body.touchp .mini-btn { min-height: 40px; font-size: 13px; padding: 4px 12px; }
+body.touchp #plan-json { font-size: 12px; max-height: 220px; }
+
+/* ---- 选项 / 表单：触控区 ≥ 44px，标签字号 ≥ 14px ---- */
+body.touchp .opt-row { gap: 6px 10px; }
+body.touchp .opt-row .lab { font-size: 14px; }
+body.touchp .opt-desc { font-size: 13.5px; }
+body.touchp .preset { min-height: 44px; font-size: 14px; padding: 6px 12px; }
+body.touchp input[type=range] { flex: 1 1 120px; height: 44px; min-width: 100px; }
+body.touchp .seed { min-height: 44px; font-size: 16px; width: 84px; }
+body.touchp .ck { min-height: 44px; font-size: 14px; }
+body.touchp .ck input { width: 20px; height: 20px; }
+body.touchp .ms { font-size: 13px; }
+body.touchp #explain { font-size: 14px; line-height: 1.6; }
+body.touchp .tasks li { font-size: 14px; padding: 6px 6px; }
+body.touchp .tasks li .hint { font-size: 13px; }
+body.touchp .tasks li .box { width: 20px; height: 20px; }
+
+/* ---- 页脚 ---- */
+body.touchp #foot { white-space: normal; font-size: 11px; line-height: 1.5; padding: 6px 10px max(6px, env(safe-area-inset-bottom)); }
+
+/* ---- 横屏手机：提示竖屏体验更佳 ---- */
+body.touchl:not(.rot-ok) #rotate-hint { display: grid; position: fixed; inset: 0; z-index: 95; place-items: center; text-align: center;
+  background: rgba(15,20,27,.96); padding: 16px; line-height: 1.8; font-size: 14px; }
+#rotate-hint b { font-size: 20px; display: block; margin-bottom: 6px; color: var(--accent); }
+#rotate-hint button { margin-top: 12px; padding: 10px 20px; min-height: 44px; border: 1px solid #3a4a60; background: #1e2834; color: var(--text); border-radius: 10px; font-size: 15px; }
+
+/* ---- 说明浮层：触屏下显示触屏图解，可上下滚动，「开始」固定在底部 ---- */
+:is(body.touchp, body.touchl) .modal { padding: 8px; align-items: stretch; }
+:is(body.touchp, body.touchl) .modal-box { display: flex; flex-direction: column; max-height: none; height: 100%; width: 100%;
+  padding: 14px 12px calc(env(safe-area-inset-bottom) + 10px); overflow: hidden; }
+:is(body.touchp, body.touchl) .modal-box h2 { font-size: 17px; margin-bottom: 8px; }
+:is(body.touchp, body.touchl) .help-body { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+:is(body.touchp, body.touchl) .help-foot { flex: none; margin-top: 10px; display: flex; justify-content: center; }
+:is(body.touchp, body.touchl) .big-btn { min-height: 48px; min-width: 160px; font-size: 16px; }
+body.touchp .help-cards { grid-template-columns: 1fr; gap: 8px; }
+body.touchp .hc p { font-size: 13.5px; }
+.touch-only svg { width: 100%; max-width: 360px; height: auto; display: block; margin: 4px auto 6px; }
